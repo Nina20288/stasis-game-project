@@ -838,10 +838,7 @@ class ChartEditor:
             self.song_pos = self.play_offset + (time.time() - self.play_start_t)
             if self.song_pos >= self.duration:
                 self.pause(); self.song_pos = self.duration
-            top = self.scroll_sec + PLAYHEAD_Y / PX_PER_SEC
-            if self.song_pos > top - 1.0:
-                self.scroll_sec = self.song_pos - PLAYHEAD_Y/PX_PER_SEC + 1.0
-            self.scroll_sec = max(0.0, self.scroll_sec)
+            self.scroll_sec = max(0.0, self.song_pos)
         if self.status_timer > 0:
             self.status_timer -= dt
 
