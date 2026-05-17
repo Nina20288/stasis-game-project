@@ -108,7 +108,7 @@ def main():
     parser.add_argument("mp3", help="Path to MP3 file")
     parser.add_argument("--artist", default="Unknown", help="Artist name")
     parser.add_argument("--title",  default=None,      help="Song title (default: filename)")
-    parser.add_argument("--charts", default="charts.py",help="Path to charts.py (default: ./charts.py)")
+    parser.add_argument("--charts-dir", default="charts", help="Path to charts directory (default: ./charts)")
     args = parser.parse_args()
 
     mp3_path = os.path.abspath(args.mp3)
@@ -157,35 +157,54 @@ def main():
 )
 """)
 
-    charts_path = os.path.abspath(args.charts)
-    print(f"[4/4] Appending to {charts_path}...")
+    charts_dir = os.path.abspath(args.charts_dir)
+    print(f"[4/4] Writing chart JSON to {charts_dir}...")
 
-    if not os.path.exists(charts_path):
-        print(f"[ERROR] {charts_path} not found. Run this from the game folder.")
-        sys.exit(1)
+    if not os.path.exists(charts_dir):
+        os.makedirs(charts_dir, exist_ok=True)
 
-    with open(charts_path, "r") as f:
-        content = f.read()
+    # Build JSON object
+    notes = []
+    for t, l, h, d in pattern:
+        obj = {"time_ms": int(round(t * 1000)), "lane": int(l)}
+        if h and d:
+            obj["type"] = "hold"
+            obj["duration_ms"] = int(round(d * 1000))
+        else:
+            obj["type"] = "tap"
+        notes.append(obj)
 
-    # Insert SongDef block before the SONGS list
-    songs_marker = "\n# ══════════════════════════════════════════════════════════════════════════════\n#  SONG LIST"
-    if songs_marker in content:
-        content = content.replace(songs_marker, block + songs_marker)
-    else:
-        content += block
+    length_ms = max((n['time_ms'] + n.get('duration_ms', 0)) for n in notes) if notes else 0
 
-    # Add to SONGS list
-    if "SONGS = [" in content:
-        content = content.replace(
-            "SONGS = [",
-            f"SONGS = [\n    {varname},"
-        )
+    out = {
+        "id": f"{title}-{args.artist}".replace(' ', '-').lower(),
+        "title": title,
+        "artist": args.artist,
+        "bpm": int(bpm),
+        "offset_ms": 0,
+        "difficulty": "default",
+        "lanes": 4,
+        "length_ms": int(length_ms),
+        "meta": {"audio": mp3_filename},
+        "notes": notes,
+    }
 
-    with open(charts_path, "w") as f:
-        f.write(content)
+    import json
+    song_name = title.replace(' ', '_').replace('/', '_').lower()
+    artist_name = args.artist.replace(' ', '_').replace('/', '_').lower()
+    safe_name = f"{song_name}_{artist_name}.json"
+    out_path = os.path.join(charts_dir, safe_name)
+    i = 1
+    base, ext = os.path.splitext(out_path)
+    while os.path.exists(out_path):
+        out_path = f"{base}_{i}{ext}"
+        i += 1
 
-    print(f"\n✓ Done! '{title}' added to charts.py as {varname}")
-    print(f"  Make sure {mp3_filename} is in the same folder as the game.")
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(out, f, indent=2)
+
+    print(f"\n✓ Done! Wrote {out_path}")
+    print(f"  Make sure {mp3_filename} is in the same folder as the game (or update meta.audio).")
 
 
 if __name__ == "__main__":

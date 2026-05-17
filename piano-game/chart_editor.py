@@ -175,33 +175,46 @@ class TextInput:
 class StartupScreen:
     """
     New Chart mode   : Title, Artist, BPM, MP3 path, Save chart as (filename)
-    Edit Existing    : Song dropdown (from charts.py), Artist, BPM, MP3 path,
-                       Load chart file (.py)
+    Edit Existing    : Song dropdown (from charts/*.json), Artist, BPM, MP3 path,
+                       Load chart file (.json/.py)
     """
 
-    # Try to read song list from charts.py in same directory
+    # Try to read song list from chart JSON files in charts/
     @staticmethod
     def _read_songs_from_charts():
-        """Return list of dicts {title, artist, bpm, audio_file} from charts.py."""
-        charts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "charts.py")
+        """Return list of dicts {title, artist, bpm, filename} from charts/*.json."""
         songs = []
-        if not os.path.exists(charts_path):
-            return songs
         try:
-            with open(charts_path) as f:
-                src = f.read()
-            # Find every SongDef(...) block
-            for m in re.finditer(
-                r'SongDef\s*\(\s*'
-                r'title\s*=\s*"([^"]+)".*?'
-                r'artist\s*=\s*"([^"]+)".*?'
-                r'bpm\s*=\s*(\d+)',
-                src, re.DOTALL
-            ):
-                title, artist, bpm = m.groups()
-                songs.append({"title": title, "artist": artist, "bpm": int(bpm)})
+            from loader import discover_charts
+            import json
+            charts = discover_charts()
+            entries = []
+            for cid, path in sorted(charts.items(), key=lambda item: item[1].name):
+                try:
+                    raw = json.loads(path.read_text(encoding='utf-8'))
+                    title = raw.get('title', 'Untitled')
+                    artist = raw.get('artist', 'Unknown')
+                    bpm = int(raw.get('bpm', 120))
+                    entries.append({
+                        "title": title,
+                        "artist": artist,
+                        "bpm": bpm,
+                        "filename": path.name,
+                        "audio_file": raw.get('audio_file', ''),
+                    })
+                except Exception:
+                    continue
+            counts = {}
+            for entry in entries:
+                counts[entry["title"]] = counts.get(entry["title"], 0) + 1
+            for entry in entries:
+                entry["display"] = (
+                    f"{entry['title']} ({entry['filename']})"
+                    if counts[entry['title']] > 1 else entry['title']
+                )
+                songs.append(entry)
         except Exception as e:
-            print(f"[STARTUP] Could not read charts.py: {e}")
+            print(f"[STARTUP] Could not read charts: {e}")
         return songs
 
     def __init__(self, screen, fonts: Fonts, initial_mp3=None):
@@ -230,11 +243,13 @@ class StartupScreen:
         self.dropdown_hover = -1
         self.song_idx       = 0          # selected index in self.songs
 
+        selected_title = self.songs[self.song_idx]["title"] if self.songs else "Untitled"
+        self.edit_title  = TextInput(selected_title, 40)
         self.edit_artist = TextInput("Unknown", 40)
         self.edit_bpm    = TextInput("120", 6)
         self.edit_mp3    = TextInput(initial_mp3 or "", 80)
         self.edit_load   = TextInput("", 80)
-        self.edit_inputs = [self.edit_artist, self.edit_bpm,
+        self.edit_inputs = [self.edit_title, self.edit_artist, self.edit_bpm,
                             self.edit_mp3,    self.edit_load]
 
         # Active input tracking (separate per mode)
@@ -282,11 +297,11 @@ class StartupScreen:
         if 0 <= idx < len(self.songs):
             self.song_idx = idx
             s = self.songs[idx]
+            self.edit_title.value  = s["title"]
             self.edit_artist.value = s["artist"]
             self.edit_bpm.value    = str(s["bpm"])
-            # Auto-fill chart filename guess
-            var = "_".join(re.sub(r"[^a-zA-Z0-9 ]","",s["title"]).strip().upper().split())
-            self.edit_load.value = var.lower() + "_chart.py"
+            self.edit_mp3.value    = s.get("audio_file", "")
+            self.edit_load.value   = os.path.join("charts", s["filename"])
         self.dropdown_open = False
 
     def _set_mode(self, mode):
@@ -395,10 +410,11 @@ class StartupScreen:
         # dropdown occupies row 0 (210), then:
         cx = SCREEN_W // 2
         return [
-            pygame.Rect(cx-220, 285, 440, 34),   # artist
-            pygame.Rect(cx-220, 360, 200, 34),   # bpm
-            pygame.Rect(cx-220, 435, 440, 34),   # mp3
-            pygame.Rect(cx-220, 510, 440, 34),   # load chart
+            pygame.Rect(cx-220, 285, 440, 34),   # title
+            pygame.Rect(cx-220, 360, 440, 34),   # artist
+            pygame.Rect(cx-220, 435, 200, 34),   # bpm
+            pygame.Rect(cx-220, 510, 440, 34),   # mp3
+            pygame.Rect(cx-220, 585, 440, 34),   # load chart
         ]
 
     # ── Submit ────────────────────────────────────────────────────────────────
@@ -422,7 +438,7 @@ class StartupScreen:
                                notes=[], saveas=saveas)
 
         else:  # edit
-            title   = self.songs[self.song_idx]["title"] if self.songs else "Untitled"
+            title   = self.edit_title.value.strip() or "Untitled"
             artist  = self.edit_artist.value.strip()  or "Unknown"
             mp3_raw = self.edit_mp3.value.strip()
             load    = self.edit_load.value.strip()     or None
@@ -435,6 +451,7 @@ class StartupScreen:
             if mp3 and not os.path.exists(mp3):
                 self.error_msg = f"MP3 not found: {mp3}"; return
             notes = []
+            source = load if load and load.lower().endswith(".json") else None
             if load:
                 if not os.path.exists(load):
                     self.error_msg = f"Chart file not found: {load}"; return
@@ -442,12 +459,26 @@ class StartupScreen:
                 if notes is None:
                     self.error_msg = "Could not parse chart file."; return
             self.result = dict(mp3=mp3, bpm=bpm, title=title, artist=artist,
-                               notes=notes, saveas=None)
+                               notes=notes, saveas=None, source=source)
 
         self.done = True
 
     def _load_chart(self, path):
         try:
+            if path.lower().endswith('.json'):
+                import json
+                raw = json.loads(open(path, encoding='utf-8').read())
+                notes = []
+                for n in raw.get('notes', []):
+                    t = float(n.get('time_ms', 0)) / 1000.0
+                    lane = int(n.get('lane', 0))
+                    if n.get('type') == 'hold' or n.get('duration_ms'):
+                        dur = float(n.get('duration_ms', 0)) / 1000.0
+                    else:
+                        dur = 0.0
+                    notes.append(Note(t, lane, dur))
+                return notes
+
             with open(path) as f:
                 src = f.read()
             m = re.search(r'pattern\s*=\s*\[([^\]]+)\]', src, re.DOTALL)
@@ -519,7 +550,7 @@ class StartupScreen:
     def _draw_edit_fields(self, F, cx):
         # ── Song dropdown ──────────────────────────────────────────────────
         dr    = self._dropdown_rect()
-        label = F.sm.render("Song (from charts.py)", True, GRAY)
+        label = F.sm.render("Song (from charts/*.json)", True, GRAY)
         self.screen.blit(label, (dr.x, dr.y - label.get_height() - 3))
 
         pygame.draw.rect(self.screen, (25,25,38), dr, border_radius=5)
@@ -527,11 +558,11 @@ class StartupScreen:
                          dr, 1, border_radius=5)
 
         if self.songs:
-            song_txt = self.songs[self.song_idx]["title"]
+            song_txt = self.songs[self.song_idx].get("display", self.songs[self.song_idx]["title"])
             st = F.sm.render(song_txt, True, WHITE)
             self.screen.blit(st, (dr.x+8, dr.y+(dr.h-st.get_height())//2))
         else:
-            nt = F.sm.render("(no songs found in charts.py)", True, MID_GRAY)
+            nt = F.sm.render("(no songs found in charts/*.json)", True, MID_GRAY)
             self.screen.blit(nt, (dr.x+8, dr.y+(dr.h-nt.get_height())//2))
 
         # Arrow
@@ -551,7 +582,7 @@ class StartupScreen:
                     pygame.draw.rect(self.screen, (40,60,100), item_r)
                 elif hover:
                     pygame.draw.rect(self.screen, (32,32,52), item_r)
-                st = F.sm.render(song["title"], True, WHITE if sel else OFF_WHITE)
+                st = F.sm.render(song.get("display", song["title"]), True, WHITE if sel else OFF_WHITE)
                 bt = F.xs.render(f"{song['bpm']} BPM  {song['artist']}", True, MID_GRAY)
                 self.screen.blit(st, (item_r.x+10, item_r.y+4))
                 self.screen.blit(bt, (item_r.x+10, item_r.y+20))
@@ -559,7 +590,7 @@ class StartupScreen:
 
         # ── Edit text fields ───────────────────────────────────────────────
         rects  = self._edit_field_rects()
-        labels = ["Artist", "BPM", "MP3 File Path", "Load Chart File (.py)"]
+        labels = ["Song Title", "Artist", "BPM", "MP3 File Path", "Load Chart File (.json/.py)"]
         for inp, rect, label in zip(self.edit_inputs, rects, labels):
             inp.draw(self.screen, F.sm, rect, label=label)
 
@@ -576,7 +607,7 @@ class StartupScreen:
 #  CHART EDITOR
 # ══════════════════════════════════════════════════════════════════════════════
 class ChartEditor:
-    def __init__(self, mp3_path, bpm, title, artist, initial_notes=None):
+    def __init__(self, mp3_path, bpm, title, artist, initial_notes=None, source_path=None):
         self.F = Fonts()
         pygame.display.set_caption(f"Chart Editor — {title}")
         self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
@@ -609,6 +640,8 @@ class ChartEditor:
         self.play_offset  = 0.0
         self.song_pos     = 0.0
 
+        self.source_path  = source_path
+
         # Scroll
         self.scroll_sec = 0.0
 
@@ -632,9 +665,10 @@ class ChartEditor:
         self.drag_moved   = False  # has mouse moved beyond threshold?
 
         # UI
-        self.status_msg   = "Ready.  Click = tap note,  drag down = hold note."
-        self.status_timer = 0.0
-        self.confirm_clear= False
+        self.status_msg    = "Ready.  Click = tap note,  drag down = hold note."
+        self.status_timer  = 0.0
+        self.confirm_clear = False
+        self.back_requested = False
 
     # ── Helpers ───────────────────────────────────────────────────────────────
     def sec_to_y(self, t):
@@ -769,6 +803,34 @@ class ChartEditor:
         with open(path,"w") as f: f.write(out)
         self.set_status(f"Saved → {filename}  ({len(self.notes)} notes)")
         print(f"[EXPORT] {path}")
+
+    def _save_json_chart(self, path):
+        import json
+        data = {
+            "title": self.title,
+            "artist": self.artist,
+            "bpm": round(self.bpm),
+            "audio_file": self.mp3_path or "",
+            "notes": [],
+        }
+        for n in sorted(self.notes, key=lambda n: n.time):
+            note = {
+                "time_ms": int(round(n.time * 1000)),
+                "lane": n.lane,
+                "type": "hold" if n.is_hold else "tap",
+                "duration_ms": int(round(n.hold_dur * 1000)) if n.is_hold else 0,
+            }
+            data["notes"].append(note)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        self.set_status(f"Saved → {path}  ({len(self.notes)} notes)")
+        print(f"[SAVE] {path}")
+
+    def save_chart(self):
+        if self.source_path:
+            self._save_json_chart(self.source_path)
+        else:
+            self.export()
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self, dt):
@@ -960,6 +1022,13 @@ class ChartEditor:
             col = SNAP_COLORS[mode] if i == self.snap_idx else MID_GRAY
             row(f"[{i+1}] {mode} notes", col, F.sm, dy=3)
 
+        # Back button
+        back_btn = self._back_button_rect()
+        pygame.draw.rect(self.screen, (30,40,50), back_btn, border_radius=8)
+        pygame.draw.rect(self.screen, (80,120,180), back_btn, 2, border_radius=8)
+        bt = F.sm.render("← BACK", True, WHITE)
+        self.screen.blit(bt, (back_btn.x + 10, back_btn.y + (back_btn.h - bt.get_height())//2))
+
         # Chart info
         divider("CHART")
         holds = sum(1 for n in self.notes if n.is_hold)
@@ -1007,6 +1076,9 @@ class ChartEditor:
             lbl = F.xs.render(f"L{i+1}", True, LANE_COLORS[i])
             self.screen.blit(lbl, (lx + LANE_W//2 - lbl.get_width()//2, SCREEN_H-18))
 
+    def _back_button_rect(self):
+        return pygame.Rect(PANEL_X + PANEL_W - 112, 102, 104, 30)
+
     def _draw_confirm(self):
         ov = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         ov.fill((0,0,0,180))
@@ -1051,6 +1123,8 @@ class ChartEditor:
                     if br.collidepoint(mx, my):
                         self.bpm_input.active  = True
                         self.bpm_input.cursor  = len(self.bpm_input.value)
+                    elif self._back_button_rect().collidepoint(mx, my):
+                        self.back_requested = True
                     else:
                         self.bpm_input.active = False
                         if self.in_timeline(mx, my):
@@ -1097,9 +1171,12 @@ class ChartEditor:
             self.snap_idx = k - pygame.K_1
         elif k == pygame.K_z and mods & pygame.KMOD_CTRL:  self.undo()
         elif k == pygame.K_y and mods & pygame.KMOD_CTRL:  self.redo()
-        elif k == pygame.K_s and mods & pygame.KMOD_CTRL:  self.export()
+        elif k == pygame.K_s and mods & pygame.KMOD_CTRL:  self.save_chart()
         elif k == pygame.K_DELETE:       self.confirm_clear = True
-        elif k == pygame.K_ESCAPE:       self.confirm_clear = False
+        elif k == pygame.K_ESCAPE:
+            self.confirm_clear = False
+        elif k == pygame.K_BACKSPACE:
+            self.back_requested = True
         # BPM nudge
         elif k == pygame.K_LEFTBRACKET:
             self.bpm = max(20, self.bpm - (5 if mods & pygame.KMOD_SHIFT else 1))
@@ -1138,6 +1215,11 @@ class ChartEditor:
     # ── Main loop ─────────────────────────────────────────────────────────────
     def run(self):
         while True:
+            if self.back_requested:
+                if self.source_path:
+                    self.save_chart()
+                pygame.mixer.music.stop()
+                return "back"
             dt = self.clock.tick(FPS) / 1000.0
             self.handle_events()
             self.update(dt)
@@ -1161,24 +1243,30 @@ def main():
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     fonts  = Fonts()
 
-    # Startup screen
-    startup = StartupScreen(screen, fonts, initial_mp3=args.mp3)
-    if args.load:
-        startup.inp_load.value = args.load
-        startup.mode = "edit"
-    params = startup.run()
+    # Startup / editor loop
+    while True:
+        startup = StartupScreen(screen, fonts, initial_mp3=args.mp3)
+        if args.load:
+            startup.edit_load.value = args.load
+            startup.mode = "edit"
+            args.load = None
+        params = startup.run()
 
-    if not params:
-        pygame.quit(); sys.exit()
+        if not params:
+            break
 
-    editor = ChartEditor(
-        mp3_path      = params["mp3"],
-        bpm           = params["bpm"],
-        title         = params["title"],
-        artist        = params["artist"],
-        initial_notes = params["notes"],
-    )
-    editor.run()
+        editor = ChartEditor(
+            mp3_path      = params["mp3"],
+            bpm           = params["bpm"],
+            title         = params["title"],
+            artist        = params["artist"],
+            initial_notes = params["notes"],
+            source_path   = params.get("source"),
+        )
+        result = editor.run()
+        if result == "back":
+            continue
+        break
 
 
 if __name__ == "__main__":

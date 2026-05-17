@@ -538,20 +538,31 @@ class RhythmGame:
         self.song_elapsed            = 0.0
         self.pause_start             = 0.0
         self._music_loaded           = False
+        self._loaded_audio_path      = None
+        if SONGS:
+            self._load_audio(SONGS[self.menu_cursor])
 
     # ── Audio ──────────────────────────────────────────────────────────────────
+    def _load_audio(self, song: SongDef):
+        if song.audio_file and os.path.exists(song.audio_file):
+            if self._loaded_audio_path != song.audio_file:
+                try:
+                    pygame.mixer.music.load(song.audio_file)
+                    self._music_loaded = True
+                    self._loaded_audio_path = song.audio_file
+                    print(f"[AUDIO] Loaded: {song.audio_file}")
+                except Exception as e:
+                    self._music_loaded = False
+                    self._loaded_audio_path = None
+                    print(f"[AUDIO] Failed to load {song.audio_file}: {e}")
+        else:
+            self._music_loaded = False
+            self._loaded_audio_path = None
+            print(f"[AUDIO] No audio file for '{song.title}' — playing silently.")
+
     def _load_and_play(self, song: SongDef):
         pygame.mixer.music.stop()
-        self._music_loaded = False
-        if song.audio_file and os.path.exists(song.audio_file):
-            try:
-                pygame.mixer.music.load(song.audio_file)
-                self._music_loaded = True
-                print(f"[AUDIO] Loaded: {song.audio_file}")
-            except Exception as e:
-                print(f"[AUDIO] Failed to load {song.audio_file}: {e}")
-        else:
-            print(f"[AUDIO] No audio file for '{song.title}' — playing silently.")
+        self._load_audio(song)
 
     def _start_music(self):
         if self._music_loaded:
@@ -577,8 +588,8 @@ class RhythmGame:
         self.total_paused   = 0.0
         self.song_elapsed   = 0.0
         self._load_and_play(song)
-        self.song_start_time = time.time()
         self._start_music()
+        self.song_start_time = time.time()
         self.screen_state   = Screen.GAME
 
     def _pause(self):
@@ -634,9 +645,14 @@ class RhythmGame:
 
         if self.screen_state == Screen.MENU:
             for n in ev["nav"]:
-                if n == "U": self.menu_cursor = (self.menu_cursor-1) % len(SONGS)
-                elif n == "D": self.menu_cursor = (self.menu_cursor+1) % len(SONGS)
-                elif n == "R": self._start_game(SONGS[self.menu_cursor])
+                if n == "U":
+                    self.menu_cursor = (self.menu_cursor-1) % len(SONGS)
+                    self._load_audio(SONGS[self.menu_cursor])
+                elif n == "D":
+                    self.menu_cursor = (self.menu_cursor+1) % len(SONGS)
+                    self._load_audio(SONGS[self.menu_cursor])
+                elif n == "R":
+                    self._start_game(SONGS[self.menu_cursor])
 
         elif self.screen_state == Screen.PAUSE:
             for n in ev["nav"]:
@@ -698,9 +714,16 @@ class RhythmGame:
             ts   = self.font_med.render(song.title, True, tc)
             self.screen.blit(ts, (box.x+18, iy+8))
 
-            # BPM + audio indicator
+            # BPM + audio / ready indicator
             has_audio = song.audio_file and os.path.exists(song.audio_file)
-            meta = f"{song.bpm} BPM  {'♪' if has_audio else '(no audio)'}"
+            if sel:
+                if has_audio:
+                    status = "READY" if self._music_loaded else "AUDIO UNAVAILABLE"
+                else:
+                    status = "(no audio)"
+                meta = f"{song.bpm} BPM  {status}"
+            else:
+                meta = f"{song.bpm} BPM  {'♪' if has_audio else '(no audio)'}"
             ms   = self.font_tiny.render(meta, True, (120,120,120))
             self.screen.blit(ms, (box.x+18, iy+36))
 
