@@ -653,11 +653,17 @@ class RhythmGame:
                     self._load_audio(SONGS[self.menu_cursor])
                 elif n == "R":
                     self._start_game(SONGS[self.menu_cursor])
+            for l in ev["p1_press"]:
+                if l == 3:
+                    self._start_game(SONGS[self.menu_cursor])
 
         elif self.screen_state == Screen.PAUSE:
             for n in ev["nav"]:
                 if n == "R": self._resume()
                 elif n == "L": self._back_to_menu()
+            for l in ev["p1_press"]:
+                if l == 0:
+                    self._back_to_menu()
 
         elif self.screen_state == Screen.GAME:
             for n in ev["nav"]:
@@ -675,6 +681,9 @@ class RhythmGame:
         elif self.screen_state == Screen.RESULT:
             for n in ev["nav"]:
                 if n == "L": self._back_to_menu()
+            for l in ev["p1_press"]:
+                if l == 0:
+                    self._back_to_menu()
 
     # ── Draw ───────────────────────────────────────────────────────────────────
     def draw(self):
@@ -812,24 +821,42 @@ class RhythmGame:
             self.screen.blit(vs, (card.right - vs.get_width()-12, ry))
 
     # ── Keyboard fallback ──────────────────────────────────────────────────────
-    P1_KEYS = {pygame.K_a:0, pygame.K_s:1, pygame.K_k:2, pygame.K_l:3}
+    P1_KEYS = {
+        pygame.K_LEFT:  0, 
+        pygame.K_UP:    1, 
+        pygame.K_DOWN:  2, 
+        pygame.K_RIGHT: 3
+    }
     P2_KEYS = {pygame.K_f:0, pygame.K_g:1, pygame.K_h:2, pygame.K_j:3}
 
     def _keydown(self, key):
         if key == pygame.K_ESCAPE: self.quit()
+        
         if self.screen_state == Screen.MENU:
-            if key == pygame.K_UP:      self.menu_cursor = (self.menu_cursor-1)%len(SONGS)
-            elif key == pygame.K_DOWN:  self.menu_cursor = (self.menu_cursor+1)%len(SONGS)
-            elif key == pygame.K_RETURN: self._start_game(SONGS[self.menu_cursor])
+            if key == pygame.K_UP:      
+                self.menu_cursor = (self.menu_cursor-1)%len(SONGS)
+                self._load_audio(SONGS[self.menu_cursor])
+            elif key == pygame.K_DOWN:  
+                self.menu_cursor = (self.menu_cursor+1)%len(SONGS)
+                self._load_audio(SONGS[self.menu_cursor])
+            # Added K_RIGHT here so your 4th button can select a song!
+            elif key in (pygame.K_RETURN, pygame.K_RIGHT): 
+                self._start_game(SONGS[self.menu_cursor])
+                
         elif self.screen_state == Screen.GAME:
             if key == pygame.K_p: self._pause()
             if key in self.P1_KEYS: self.p1.press(self.P1_KEYS[key], self.fts, self.font_med)
             if key in self.P2_KEYS: self.p2.press(self.P2_KEYS[key], self.fts, self.font_med)
+            
         elif self.screen_state == Screen.PAUSE:
-            if key == pygame.K_RETURN:    self._resume()
-            elif key == pygame.K_BACKSPACE: self._back_to_menu()
+            # Allows you to use UP (or Return) to resume, DOWN (or Backspace) to quit
+            if key in (pygame.K_RETURN, pygame.K_UP):    self._resume()
+            elif key in (pygame.K_BACKSPACE, pygame.K_DOWN): self._back_to_menu()
+            
         elif self.screen_state == Screen.RESULT:
-            if key == pygame.K_BACKSPACE: self._back_to_menu()
+            # Pressing any arrow key on the result screen takes you back to menu
+            if key in (pygame.K_BACKSPACE, pygame.K_LEFT, pygame.K_UP, pygame.K_DOWN, pygame.K_RIGHT): 
+                self._back_to_menu()
 
     def _keyup(self, key):
         if self.screen_state == Screen.GAME:
