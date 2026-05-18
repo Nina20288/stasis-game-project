@@ -300,7 +300,7 @@ class StartupScreen:
             self.edit_title.value  = s["title"]
             self.edit_artist.value = s["artist"]
             self.edit_bpm.value    = str(s["bpm"])
-            self.edit_mp3.value    = s.get("audio_file", "")
+            self.edit_mp3.value    = os.path.basename(s.get("audio_file", ""))
             self.edit_load.value   = os.path.join("charts", s["filename"])
         self.dropdown_open = False
 
@@ -418,6 +418,17 @@ class StartupScreen:
         ]
 
     # ── Submit ────────────────────────────────────────────────────────────────
+    def _resolve_mp3(self, raw):
+        """Return an absolute path to the MP3, checking charts/ if bare filename."""
+        if not raw:
+            return None
+        if os.path.exists(raw):
+            return raw
+        charts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "charts", raw)
+        if os.path.exists(charts_path):
+            return charts_path
+        return None
+
     def _submit(self):
         self.error_msg = ""
 
@@ -431,9 +442,9 @@ class StartupScreen:
                 assert 20 <= bpm <= 400
             except:
                 self.error_msg = "BPM must be a number between 20 and 400."; return
-            mp3 = mp3_raw if mp3_raw else None
-            if mp3 and not os.path.exists(mp3):
-                self.error_msg = f"MP3 not found: {mp3}"; return
+            mp3 = self._resolve_mp3(mp3_raw)
+            if mp3_raw and not mp3:
+                self.error_msg = f"MP3 not found: {mp3_raw}"; return
             self.result = dict(mp3=mp3, bpm=bpm, title=title, artist=artist,
                                notes=[], saveas=saveas)
 
@@ -447,9 +458,9 @@ class StartupScreen:
                 assert 20 <= bpm <= 400
             except:
                 self.error_msg = "BPM must be a number between 20 and 400."; return
-            mp3 = mp3_raw if mp3_raw else None
-            if mp3 and not os.path.exists(mp3):
-                self.error_msg = f"MP3 not found: {mp3}"; return
+            mp3 = self._resolve_mp3(mp3_raw)
+            if mp3_raw and not mp3:
+                self.error_msg = f"MP3 not found: {mp3_raw}"; return
             notes = []
             source = load if load and load.lower().endswith(".json") else None
             if load:
@@ -810,7 +821,7 @@ class ChartEditor:
             "title": self.title,
             "artist": self.artist,
             "bpm": round(self.bpm),
-            "audio_file": self.mp3_path or "",
+            "audio_file": os.path.basename(self.mp3_path) if self.mp3_path else "",
             "notes": [],
         }
         for n in sorted(self.notes, key=lambda n: n.time):
@@ -1039,6 +1050,7 @@ class ChartEditor:
         controls = [
             ("Space",   "Play/Pause"),
             ("R",       "Rewind"),
+            ("E",       "Rewind 5s"),
             ("Scroll",  "Scroll"),
             ("Click",   "Tap note"),
             ("Drag↓",   "Hold note"),
@@ -1162,6 +1174,12 @@ class ChartEditor:
 
         if k == pygame.K_SPACE:          self.toggle_play()
         elif k == pygame.K_r:            self.rewind()
+        elif k == pygame.K_e:
+            was = self.playing
+            if was: self.pause()
+            self.song_pos   = max(0.0, self.song_pos - 5.0)
+            self.scroll_sec = max(0.0, self.song_pos)
+            if was: self.play()
         elif k == pygame.K_HOME:         self.scroll_sec=0.0; self.song_pos=0.0
         elif k == pygame.K_END:          self.scroll_sec=max(0,self.duration-PLAYHEAD_Y/PX_PER_SEC)
         elif k in (pygame.K_1,pygame.K_2,pygame.K_3,pygame.K_4):

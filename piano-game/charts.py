@@ -12,7 +12,7 @@ from pathlib import Path
 import json, os
 from typing import List, Tuple
 
-_DIR = Path(__file__).parent
+_DIR = Path(__file__).parent / "charts"
 
 def _audio(filename: str):
     if not filename:
@@ -49,7 +49,7 @@ def _load_from_json(path: Path) -> SongDef:
 
 
 def discover_songs(charts_dir: Path = None):
-    charts_dir = Path(charts_dir) if charts_dir else (_DIR / "charts")
+    charts_dir = Path(charts_dir) if charts_dir else _DIR
     songs = []
     if not charts_dir.exists():
         return songs
