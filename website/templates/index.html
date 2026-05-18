@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="30">
+  <title>STASIS — Leaderboard</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── Reset ────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Variables ────────────────────────────────────────────── */
+    :root {
+      --bg:      #d4ccb8;
+      --text:    #48423e;
+      --accent:  #cc5a39;
+      --gold:    #a87b08;
+      --silver:  #7a8c97;
+      --bronze:  #8c5f22;
+      --card:    rgba(250, 246, 234, 0.62);
+      --border:  rgba(72, 66, 62, 0.13);
+      --row-alt: rgba(72, 66, 62, 0.045);
+      --row-hov: rgba(255, 251, 238, 0.72);
+    }
+
+    /* ── Base ─────────────────────────────────────────────────── */
+    html { scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Page wrapper ─────────────────────────────────────────── */
+    .page {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 52px 28px 120px;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       HEADER
+    ════════════════════════════════════════════════════════════ */
+    .header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    /* Star + rule lockup */
+    .logo-lockup {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 6px;
+    }
+
+    .logo-star {
+      flex-shrink: 0;
+      display: block;
+    }
+
+    .logo-rule {
+      width: 72px;
+      height: 2px;
+      flex-shrink: 0;
+      background: linear-gradient(to right, var(--accent), transparent);
+      margin-left: -2px;
+    }
+
+    .site-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(64px, 11vw, 96px);
+      letter-spacing: 0.11em;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .site-sub {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.45em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-top: 3px;
+    }
+
+    .updated {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--text);
+      opacity: 0.36;
+      letter-spacing: 0.07em;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       PODIUM
+    ════════════════════════════════════════════════════════════ */
+    .podium {
+      display: flex;
+      align-items: flex-end;   /* stepped effect */
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 56px;
+    }
+
+    .podium-slot { display: flex; }
+
+    /* Card shell */
+    .podium-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    /* Coloured top band */
+    .podium-band {
+      width: 100%;
+      height: 5px;
+      flex-shrink: 0;
+    }
+    .place-1 .podium-band { background: var(--gold); }
+    .place-2 .podium-band { background: var(--silver); }
+    .place-3 .podium-band { background: var(--bronze); }
+
+    /* Inner body — vertically centred */
+    .podium-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 22px 26px;
+      text-align: center;
+    }
+
+    /* Card heights create the podium step */
+    .place-1 .podium-card { min-width: 242px; min-height: 290px; }
+    .place-2 .podium-card { min-width: 192px; min-height: 242px; }
+    .place-3 .podium-card { min-width: 192px; min-height: 218px; }
+
+    /* Rank number */
+    .podium-rank {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .place-1 .podium-rank { font-size: 82px; color: var(--gold); }
+    .place-2 .podium-rank { font-size: 60px; color: var(--silver); }
+    .place-3 .podium-rank { font-size: 60px; color: var(--bronze); }
+
+    /* Name */
+    .podium-name {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.04em;
+      word-break: break-word;
+      margin-top: 6px;
+    }
+    .place-1 .podium-name { font-size: 22px; }
+    .place-2 .podium-name,
+    .place-3 .podium-name { font-size: 18px; }
+
+    /* Points */
+    .podium-pts {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-top: 5px;
+    }
+    .place-1 .podium-pts { font-size: 16px; }
+    .place-2 .podium-pts,
+    .place-3 .podium-pts { font-size: 14px; }
+
+    /* ════════════════════════════════════════════════════════════
+       SECTION DIVIDER
+    ════════════════════════════════════════════════════════════ */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .divider-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--text);
+      opacity: 0.38;
+      white-space: nowrap;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       RANKINGS LIST
+    ════════════════════════════════════════════════════════════ */
+    .list-head {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 16px;
+      padding: 0 16px 8px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--text);
+      opacity: 0.34;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2px;
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 11px 16px;
+      border-radius: 2px;
+      transition: background 0.12s;
+    }
+    .list-row:nth-child(even) { background: var(--row-alt); }
+    .list-row:hover           { background: var(--row-hov); }
+
+    .row-rank {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      opacity: 0.36;
+      text-align: right;
+    }
+    .row-name {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--text);
+    }
+    .row-pts {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    /* ── Top-10 accent strip ──────────────────────────────────── */
+    .list-row.top-ten .row-rank { opacity: 0.56; }
+    .list-row.top-ten .row-name { font-weight: 700; }
+
+    /* ════════════════════════════════════════════════════════════
+       EMPTY STATE
+    ════════════════════════════════════════════════════════════ */
+    .empty {
+      text-align: center;
+      padding: 90px 0;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 19px;
+      letter-spacing: 0.14em;
+      opacity: 0.32;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       FOOTER
+    ════════════════════════════════════════════════════════════ */
+    .footer {
+      margin-top: 72px;
+      text-align: center;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      opacity: 0.24;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ══ HEADER ══════════════════════════════════════════════ -->
+  <header class="header">
+
+    <!-- Star + horizontal rule (mirroring the logo) -->
+    <div class="logo-lockup">
+      <svg class="logo-star" width="46" height="46" viewBox="0 0 48 48"
+           fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- 4-pointed star, left-right axis slightly wider -->
+        <path d="M24 3 L27.5 20.5 L46 24 L27.5 27.5 L24 45 L20.5 27.5 L2 24 L20.5 20.5 Z"
+              fill="#cc5a39"/>
+      </svg>
+      <div class="logo-rule"></div>
+    </div>
+
+    <h1 class="site-title">STASIS</h1>
+    <p class="site-sub">Leaderboard</p>
+    <p class="updated">Updated {{ updated_at }}&nbsp;&nbsp;·&nbsp;&nbsp;auto-refreshes every 30 s</p>
+
+  </header>
+
+  {% if players %}
+
+  <!-- ══ PODIUM — top 3 ══════════════════════════════════════ -->
+  <div class="podium">
+
+    <!-- 2nd place (left) -->
+    {% if players|length >= 2 %}
+    <div class="podium-slot place-2">
+      <div class="podium-card">
+        <div class="podium-band"></div>
+        <div class="podium-body">
+          <div class="podium-rank">02</div>
+          <div class="podium-name">{{ players[1][0] }}</div>
+          <div class="podium-pts">{{ "{:,}".format(players[1][1]) }} pts</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- 1st place (centre — tallest) -->
+    <div class="podium-slot place-1">
+      <div class="podium-card">
+        <div class="podium-band"></div>
+        <div class="podium-body">
+          <!-- Gold star accent for the winner -->
+          <svg width="24" height="24" viewBox="0 0 48 48" fill="none"
+               style="margin-bottom:8px; opacity:0.6;">
+            <path d="M24 3 L27.5 20.5 L46 24 L27.5 27.5 L24 45 L20.5 27.5 L2 24 L20.5 20.5 Z"
+                  fill="#a87b08"/>
+          </svg>
+          <div class="podium-rank">01</div>
+          <div class="podium-name">{{ players[0][0] }}</div>
+          <div class="podium-pts">{{ "{:,}".format(players[0][1]) }} pts</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3rd place (right) -->
+    {% if players|length >= 3 %}
+    <div class="podium-slot place-3">
+      <div class="podium-card">
+        <div class="podium-band"></div>
+        <div class="podium-body">
+          <div class="podium-rank">03</div>
+          <div class="podium-name">{{ players[2][0] }}</div>
+          <div class="podium-pts">{{ "{:,}".format(players[2][1]) }} pts</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div><!-- /podium -->
+
+  <!-- ══ RANKINGS 4+ ══════════════════════════════════════════ -->
+  {% if players|length > 3 %}
+  <div class="divider"><span class="divider-label">Rankings</span></div>
+  <div class="list-head">
+    <span style="text-align:right">Rank</span>
+    <span>Player</span>
+    <span>Points</span>
+  </div>
+  <div>
+    {% for name, pts in players[3:] %}
+    <div class="list-row{% if loop.index + 3 <= 10 %} top-ten{% endif %}">
+      <span class="row-rank">{{ loop.index + 3 }}</span>
+      <span class="row-name">{{ name }}</span>
+      <span class="row-pts">{{ "{:,}".format(pts) }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty">No players yet — scan a badge to get started</div>
+  {% endif %}
+
+  <footer class="footer">Stasis Hackathon &nbsp;·&nbsp; Points System</footer>
+
+</div><!-- /page -->
+
+<!-- ══ Canvas noise for paper-grain texture ══════════════════ -->
+<script>
+  (function () {
+    var S = 200;
+    var c = document.createElement('canvas');
+    c.width = S; c.height = S;
+    var ctx = c.getContext('2d');
+    var d   = ctx.createImageData(S, S);
+    for (var i = 0; i < d.data.length; i += 4) {
+      var v = Math.random() * 255 | 0;
+      d.data[i] = v; d.data[i+1] = v; d.data[i+2] = v; d.data[i+3] = 255;
+    }
+    ctx.putImageData(d, 0, 0);
+    var el = document.createElement('div');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText =
+      'position:fixed;inset:0;pointer-events:none;z-index:9999;' +
+      'background-image:url(' + c.toDataURL() + ');' +
+      'background-repeat:repeat;' +
+      'opacity:0.05;' +
+      'mix-blend-mode:multiply;';
+    document.body.appendChild(el);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STASIS — Leaderboard</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Supabase JS SDK (UMD — exposes window.supabase) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    /* ── Reset ────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Variables ────────────────────────────────────────────── */
+    :root {
+      --bg:      #d4ccb8;
+      --text:    #48423e;
+      --accent:  #cc5a39;
+      --gold:    #a87b08;
+      --silver:  #7a8c97;
+      --bronze:  #8c5f22;
+      --card:    rgba(250, 246, 234, 0.62);
+      --border:  rgba(72, 66, 62, 0.13);
+      --row-alt: rgba(72, 66, 62, 0.045);
+      --row-hov: rgba(255, 251, 238, 0.72);
+    }
+
+    /* ── Base ─────────────────────────────────────────────────── */
+    html { scroll-behavior: smooth; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Page ─────────────────────────────────────────────────── */
+    .page {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 52px 28px 120px;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       HEADER
+    ════════════════════════════════════════════════════════════ */
+    .header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .logo-img {
+      display: block;
+      margin: 0 auto 18px;
+      max-width: 500px;
+      width: 88%;
+    }
+
+    .site-sub {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: 0.45em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    /* Live badge + timestamp row */
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 18px;
+      min-height: 30px;
+    }
+
+    .live-badge {
+      display: none; /* shown by JS once subscribed */
+      align-items: center;
+      gap: 8px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #4a7c4e;
+    }
+
+    .live-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #4caf50;
+      flex-shrink: 0;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1;   transform: scale(1);    }
+      50%       { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    .updated {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 24px;
+      letter-spacing: 0.07em;
+      color: var(--text);
+      opacity: 0.38;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       PODIUM
+    ════════════════════════════════════════════════════════════ */
+    .podium {
+      display: flex;
+      align-items: flex-end;   /* stepped effect */
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 56px;
+    }
+
+    .podium-slot { display: flex; }
+
+    .podium-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .podium-band { width: 100%; height: 5px; flex-shrink: 0; }
+    .place-1 .podium-band { background: var(--gold); }
+    .place-2 .podium-band { background: var(--silver); }
+    .place-3 .podium-band { background: var(--bronze); }
+
+    .podium-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 22px 26px;
+      text-align: center;
+    }
+
+    /* Step heights */
+    .place-1 .podium-card { min-width: 242px; min-height: 290px; }
+    .place-2 .podium-card { min-width: 192px; min-height: 242px; }
+    .place-3 .podium-card { min-width: 192px; min-height: 218px; }
+
+    .podium-rank {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .place-1 .podium-rank { font-size: 82px; color: var(--gold);   }
+    .place-2 .podium-rank { font-size: 60px; color: var(--silver); }
+    .place-3 .podium-rank { font-size: 60px; color: var(--bronze); }
+
+    .podium-name {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.04em;
+      word-break: break-word;
+      margin-top: 6px;
+    }
+    .place-1 .podium-name { font-size: 28px; }
+    .place-2 .podium-name,
+    .place-3 .podium-name { font-size: 22px; }
+
+    .podium-pts {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-top: 5px;
+    }
+    .place-1 .podium-pts { font-size: 28px; }
+    .place-2 .podium-pts,
+    .place-3 .podium-pts { font-size: 24px; }
+
+    /* ════════════════════════════════════════════════════════════
+       DIVIDER
+    ════════════════════════════════════════════════════════════ */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .divider-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--text);
+      opacity: 0.38;
+      white-space: nowrap;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       RANKINGS LIST
+    ════════════════════════════════════════════════════════════ */
+    .list-head {
+      display: grid;
+      grid-template-columns: 60px 1fr auto;
+      gap: 16px;
+      padding: 0 16px 10px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--text);
+      opacity: 0.34;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2px;
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 60px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 12px 16px;
+      border-radius: 2px;
+      transition: background 0.12s;
+    }
+    .list-row:nth-child(even) { background: var(--row-alt); }
+    .list-row:hover           { background: var(--row-hov); }
+
+    .row-rank {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      opacity: 0.36;
+      text-align: right;
+    }
+    .row-name {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--text);
+    }
+    .row-pts {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .list-row.top-ten .row-rank { opacity: 0.56; }
+    .list-row.top-ten .row-name { font-weight: 700; }
+
+    /* ════════════════════════════════════════════════════════════
+       STATES
+    ════════════════════════════════════════════════════════════ */
+    .state-msg {
+      text-align: center;
+      padding: 90px 0;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 32px;
+      letter-spacing: 0.14em;
+      opacity: 0.32;
+    }
+
+    .error-box {
+      text-align: center;
+      padding: 36px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      background: rgba(204, 90, 57, 0.07);
+      border: 1px solid rgba(204, 90, 57, 0.22);
+      border-radius: 3px;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       FOOTER
+    ════════════════════════════════════════════════════════════ */
+    .footer {
+      margin-top: 72px;
+      text-align: center;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      opacity: 0.24;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ══ HEADER ══════════════════════════════════════════════ -->
+  <header class="header">
+    <!--
+      Save the STASIS logo image as "stasis-logo.png" in this
+      same folder before deploying to Vercel.
+    -->
+    <img src="./stasis-logo.png" alt="STASIS" class="logo-img">
+    <p class="site-sub">Leaderboard</p>
+    <div class="status-row">
+      <span class="live-badge" id="live-badge">
+        <span class="live-dot"></span>Live
+      </span>
+      <span class="updated" id="updated-at"></span>
+    </div>
+  </header>
+
+  <!-- ══ Leaderboard (rendered by JS) ════════════════════════ -->
+  <div id="root">
+    <div class="state-msg">Loading…</div>
+  </div>
+
+  <footer class="footer">Stasis Hackathon &nbsp;·&nbsp; Points System</footer>
+
+</div><!-- /page -->
+
+<!-- ══ Canvas noise overlay ══════════════════════════════════ -->
+<script>
+  (function () {
+    var S = 200, c = document.createElement('canvas');
+    c.width = S; c.height = S;
+    var ctx = c.getContext('2d'), d = ctx.createImageData(S, S);
+    for (var i = 0; i < d.data.length; i += 4) {
+      var v = Math.random() * 255 | 0;
+      d.data[i] = v; d.data[i+1] = v; d.data[i+2] = v; d.data[i+3] = 255;
+    }
+    ctx.putImageData(d, 0, 0);
+    var el = document.createElement('div');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText =
+      'position:fixed;inset:0;pointer-events:none;z-index:9999;' +
+      'background-image:url(' + c.toDataURL() + ');background-repeat:repeat;' +
+      'opacity:0.05;mix-blend-mode:multiply;';
+    document.body.appendChild(el);
+  })();
+</script>
+
+<!-- ══ Supabase leaderboard ═══════════════════════════════════
+
+  SETUP STEPS
+  ───────────
+  1. Create a free Supabase project at https://supabase.com
+  2. In the SQL editor, run this to create the table:
+
+       create table badges (
+         uid        text primary key,
+         name       text,
+         points     integer default 0,
+         last_seen  timestamptz,
+         created_at timestamptz default now()
+       );
+
+  3. Enable real-time for the table:
+       Supabase dashboard → Database → Replication → badges ✓
+
+  4. Copy your project URL and anon key from:
+       Supabase dashboard → Project Settings → API
+
+  5. Paste them into SUPABASE_URL and SUPABASE_ANON_KEY below.
+
+  6. Save stasis-logo.png in this folder, then deploy to Vercel
+     by importing the repo and setting the Root Directory to
+     "website/vercel".
+
+════════════════════════════════════════════════════════════ -->
+<script>
+  // ── Config ─────────────────────────────────────────────────
+  const SUPABASE_URL      = 'https://fetfrkxaxwpblghludzl.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZldGZya3hheHdwYmxnaGx1ZHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNzk1OTAsImV4cCI6MjA5NDY1NTU5MH0.1SMtWaCheFWXRhEcd3WQYs6mcecId43bq7BMKgtDn68';
+  // ───────────────────────────────────────────────────────────
+
+  const db   = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const root = document.getElementById('root');
+
+  // ── Utilities ───────────────────────────────────────────────
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+  }
+
+  function fmt(n) { return Number(n || 0).toLocaleString(); }
+
+  function stampNow() {
+    const el = document.getElementById('updated-at');
+    if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  }
+
+  // ── Render ──────────────────────────────────────────────────
+  function render(players) {
+    if (!players || players.length === 0) {
+      root.innerHTML = '<div class="state-msg">No players yet — scan a badge to get started</div>';
+      return;
+    }
+    root.innerHTML = buildPodium(players.slice(0, 3))
+                   + buildList(players.slice(3));
+    stampNow();
+  }
+
+  function buildPodium(top3) {
+    const goldStar = `
+      <svg width="24" height="24" viewBox="0 0 48 48" fill="none"
+           style="margin-bottom:8px;opacity:0.6;">
+        <path d="M24 3 L27.5 20.5 L46 24 L27.5 27.5 L24 45 L20.5 27.5 L2 24 L20.5 20.5 Z"
+              fill="#a87b08"/>
+      </svg>`;
+
+    // Slots rendered left→right: 2nd, 1st, 3rd
+    const slots = [
+      { cls: 'place-2', rank: '02', idx: 1 },
+      { cls: 'place-1', rank: '01', idx: 0 },
+      { cls: 'place-3', rank: '03', idx: 2 },
+    ];
+
+    const cards = slots
+      .filter(s => top3[s.idx])
+      .map(s => {
+        const p = top3[s.idx];
+        return `
+          <div class="podium-slot ${s.cls}">
+            <div class="podium-card">
+              <div class="podium-band"></div>
+              <div class="podium-body">
+                ${s.idx === 0 ? goldStar : ''}
+                <div class="podium-rank">${s.rank}</div>
+                <div class="podium-name">${esc(p.name)}</div>
+                <div class="podium-pts">${fmt(p.points)} pts</div>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+    return `<div class="podium">${cards}</div>`;
+  }
+
+  function buildList(rest) {
+    if (!rest.length) return '';
+
+    const rows = rest.map((p, i) => {
+      const rank   = i + 4;
+      const cls    = rank <= 10 ? ' top-ten' : '';
+      return `
+        <div class="list-row${cls}">
+          <span class="row-rank">${rank}</span>
+          <span class="row-name">${esc(p.name)}</span>
+          <span class="row-pts">${fmt(p.points)}</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="divider"><span class="divider-label">Rankings</span></div>
+      <div class="list-head">
+        <span style="text-align:right">Rank</span>
+        <span>Player</span>
+        <span>Points</span>
+      </div>
+      <div>${rows}</div>`;
+  }
+
+  // ── Fetch ────────────────────────────────────────────────────
+  async function fetchLeaderboard() {
+    const { data, error } = await db
+      .from('badges')
+      .select('name, points, last_seen')
+      .not('name', 'is', null)
+      .order('points',    { ascending: false })
+      .order('last_seen', { ascending: false });
+
+    if (error) {
+      console.error(error);
+      root.innerHTML = `<div class="error-box">
+        Could not load leaderboard.<br>${esc(error.message)}
+      </div>`;
+      return;
+    }
+    render(data || []);
+  }
+
+  // ── Real-time subscription ────────────────────────────────────
+  db.channel('leaderboard-live')
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'badges' },
+        () => fetchLeaderboard())
+    .subscribe(status => {
+      const badge = document.getElementById('live-badge');
+      if (badge) badge.style.display = status === 'SUBSCRIBED' ? 'inline-flex' : 'none';
+    });
+
+  // ── Boot ──────────────────────────────────────────────────────
+  fetchLeaderboard();
+</script>
+
+</body>
+</html>
